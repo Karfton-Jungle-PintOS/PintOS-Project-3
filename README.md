@@ -1,131 +1,84 @@
-# 📘 Docker기반 Pintos 개발 환경 구축 가이드 
+# PintOS Project 3 · Virtual Memory
 
-이 문서는 **Windows**와 **macOS** 사용자가 Docker와 VSCode DevContainer 기능을 활용하여 Pintos OS 프로젝트를 빠르게 구축할 수 있도록 도와줍니다.
+KAIST PintOS를 바탕으로 가상 메모리를 구현하는 크래프톤 정글 팀 프로젝트입니다.
+SPT, 프레임 관리, 지연 로딩, 프로세스 복사와 파일 매핑을 다룹니다.
 
-[**주의**]
-* ubunbu:22.04 버전은 충분한 테스트와 검증이 되지 않았습니다. 이 점을 주의해서 사용하시기 바랍니다.
+> **개발 코드는 [`dev`](https://github.com/Karfton-Jungle-PintOS/PintOS-Project-3/tree/dev)에서 확인해 주세요.**
+> `main`의 소스는 초기 버전입니다. `mmap`·`munmap` 작업은 [PR #32](https://github.com/Karfton-Jungle-PintOS/PintOS-Project-3/pull/32)에서 검토 중이며 아직 병합되지 않았습니다.
 
-[**참고**] 
-* pintos 도커 환경은 `64비트 기반 X86-64` 기반의 `ubuntu:22.04` 버전을 사용합니다.
-   * kaist-pintos는 오리지널 pintos와 달리 64비트 환경을 지원합니다.
-   * 이번 도커 환경은 ubuntu 22.04를 지원하여 vscode의 최신 버전에서 원격 연결이 안되는 문제를 해결하였습니다.
-* pintos 도커 환경은 kaist-pintos에서 추천하는 qemu 에뮬레이터를 설치하고 사용합니다. 
-* pintos 도커 환경은 9주차부터 13주차까지 같은 환경을 사용합니다. 이 기간동안 별도의 개발 환경을 제공하지 않습니다.
-* 기존 도커 환경과 달리 `vscode`와 통합된 디버깅 환경(F5로 시작하는)을 제공하지 않습니다. 디버깅이 필요한 경우 `gdb`를 사용하세요. 
-* vscode에서 터미널을 오픈하면 자동으로 `source /workspaces/pintos_22.04_lab_docker/pintos/activate`를 실행합니다.
+## 바로가기
 
----
+| 항목 | 링크 |
+| --- | --- |
+| 최신 개발 코드 | [dev 브랜치](https://github.com/Karfton-Jungle-PintOS/PintOS-Project-3/tree/dev) |
+| 진행 상황·잔여 작업 | [공개 프로젝트 보드](https://github.com/orgs/Karfton-Jungle-PintOS/projects/2) |
+| 파일 매핑 작업·검증 결과 | [mmap·munmap PR #32](https://github.com/Karfton-Jungle-PintOS/PintOS-Project-3/pull/32) |
+| 환경 설정 안내 | [초기 개발 환경 가이드 원문](docs/development-environment.md) |
+| 과제 명세 | [KAIST PintOS · Virtual Memory](https://casys-kaist.github.io/pintos-kaist/project3/introduction.html) |
 
-## 1. Docker란 무엇인가요?
+## 구현 영역
 
-**Docker**는 애플리케이션을 어떤 컴퓨터에서든 **동일한 환경에서 실행**할 수 있게 도와주는 **가상화 플랫폼**입니다.  
+| 영역 | 주요 내용 | 확인 위치 |
+| --- | --- | --- |
+| SPT·Frame Table | 페이지 정보와 물리 프레임 관리 | [dev/vm](https://github.com/Karfton-Jungle-PintOS/PintOS-Project-3/tree/dev/pintos/vm) |
+| Lazy Loading·Fork | 첫 접근 시 페이지 적재, 자식 프로세스의 페이지 복사 | [dev/vm.c](https://github.com/Karfton-Jungle-PintOS/PintOS-Project-3/blob/dev/pintos/vm/vm.c) |
+| mmap·munmap | 파일 매핑·해제, 변경된 내용의 파일 반영 | [PR #32](https://github.com/Karfton-Jungle-PintOS/PintOS-Project-3/pull/32) |
+| Swap·자원 정리 | 페이지 교체와 스왑, 종료 시 자원 회수 | [프로젝트 보드](https://github.com/orgs/Karfton-Jungle-PintOS/projects/2) |
 
-Docker는 다음 구성요소로 이루어져 있습니다:
+구현과 검증은 진행 중이며, `mmap`·`swap` 관련 잔여 작업이 있습니다.
+아래는 **PR #32의 커밋 `29d9f1e`**를 실행한 결과입니다. `main`·`dev`의 검증 결과와 구분합니다.
 
-- **Docker Engine**: 컨테이너를 실행하는 핵심 서비스
-- **Docker Image**: 컨테이너 생성에 사용되는 템플릿 (레시피 📃)
-- **Docker Container**: 이미지를 기반으로 생성된 실제 실행 환경 (요리 🍜)
+| 검증 범위 | PASS | FAIL |
+| --- | ---: | ---: |
+| 전체 141개 | 100 | 41 |
+| 그중 mmap 25개 | 21 | 4 |
 
-### ✅ AWS EC2와의 차이점
+실패 항목과 제한 사항은 [PR #32](https://github.com/Karfton-Jungle-PintOS/PintOS-Project-3/pull/32)의 검증 기록을 확인해 주세요.
 
-| 구분 | EC2 같은 VM | Docker 컨테이너 |
-|------|-------------|-----------------|
-| 실행 단위 | OS 포함 전체 | 애플리케이션 단위 |
-| 실행 속도 | 느림 (수십 초 이상) | 매우 빠름 (거의 즉시) |
-| 리소스 사용 | 무거움 | 가벼움 |
+## 개발 환경
 
----
-
-## 2. VSCode DevContainer란 무엇인가요?
-
-**DevContainer**는 VSCode에서 Docker 컨테이너를 **개발 환경**처럼 사용할 수 있게 해주는 기능입니다.
-
-- 코드를 실행하거나 디버깅할 때 **컨테이너 내부 환경에서 동작**
-- 팀원 간 **환경 차이 없이 동일한 개발 환경 구성** 가능
-- `.devcontainer` 폴더에 정의된 설정을 VSCode가 읽어 자동 구성
-
----
-
-## 3. Docker Desktop 설치하기
-
-1. Docker 공식 사이트에서 설치 파일 다운로드:  
-   👉 [https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
-
-2. 설치 후 Docker Desktop 실행  
-   - Windows: Docker 아이콘이 트레이에 떠야 함  
-   - macOS: 상단 메뉴바에 Docker 아이콘 확인
-
----
-
-## 4. 프로젝트 파일 다운로드 (히스토리 없이)
-
-터미널(CMD, PowerShell, zsh 등)에서 아래 명령어로 프로젝트 폴더만 내려받습니다:
+- Docker Desktop과 VS Code의 Dev Containers 확장이 필요합니다.
+- 저장소의 `.devcontainer`는 Ubuntu 22.04, x86-64, GCC, QEMU 환경을 구성합니다.
+- 개발 코드를 받으려면 `dev` 브랜치를 사용합니다.
 
 ```bash
-git clone --depth=1 https://github.com/krafton-jungle/pintos_22.04_lab_docker.git 
+git clone --branch dev https://github.com/Karfton-Jungle-PintOS/PintOS-Project-3.git
+cd PintOS-Project-3
 ```
 
-- `--depth=1` 옵션은 git commit 히스토리를 생략하고 **최신 파일만 가져옵니다.**
+VS Code에서 이 폴더를 열고 **Dev Containers: Reopen in Container**를 실행합니다.
+이후 명령은 컨테이너의 **Bash 터미널**, 저장소 최상위 폴더에서 시작합니다.
 
-### 📂 다운로드 후 폴더 구조 설명
-
-```
-pintos_22.04_lab_docker/
-├── .devcontainer/
-│   ├── devcontainer.json      # VSCode에서 컨테이너 환경 설정
-│   └── Dockerfile             # pintos 개발 환경 도커 이미지 정의
-│
-├── pintos
-│   ├── threads                # 9주차 threads 프로젝트 폴더
-│   ├── userprog               # 10-11주차 user program 프로젝트 폴더
-│   └── vm                     # 12-13주차 virtual memory 프로젝트 폴더
-│
-└── README.md                  # 현재 문서
-```
----
-
-## 5. VSCode에서 해당 프로젝트 폴더 열기
-
-1. VSCode를 실행
-2. `파일 → 폴더 열기`로 방금 클론한 `pintos_22.04_lab_docker` 폴더를 선택
-
----
-
-## 6. 개발 컨테이너: 컨테이너에서 열기
-
-1. VSCode에서 `Ctrl+Shift+P` (Windows/Linux) 또는 `Cmd+Shift+P` (macOS)를 누릅니다.
-2. 명령어 팔레트에서 `Dev Containers: Reopen in Container`를 선택합니다.
-3. 이후 컨테이너가 자동으로 실행되고 빌드됩니다. 처음 컨테이너를 열면 빌드하는 시간이 오래걸릴 수 있습니다. 빌드 후, 프로젝트가 **컨테이너 안에서 실행됨**.
-
----
-
-## 7. C 파일에 브레이크포인트 설정 후 디버깅 (F5)
-pintos 랩에서는 vscode기반의 디버깅을 지원하지 않습니다. 
-
----
-## 8. 새로운 Git 리포지토리에 Commit & Push 하기
-
-금주 프로젝트를 개인 Git 리포와 같은 다른 리포지토리에 업로드하려면, 기존 Git 연결을 제거하고 새롭게 초기화해야 합니다.
-
-### ✅ 완전히 새로운 Git 리포로 업로드하는 방법
-
-아래 명령어를 순서대로 실행하세요:
+## 빌드와 테스트
 
 ```bash
-rm -rf .git
-git init
-git remote add origin https://github.com/myusername/my-new-repo.git
-git add .
-git commit -m "Clean start"
-git push -u origin main
+source pintos/activate
+cd pintos/vm
+make
+make check
 ```
 
-### 📌 설명
+`make`와 `make check`는 `pintos/vm/build`에서 실행됩니다.
+전체 결과는 `pintos/vm/build/results`에 기록됩니다.
 
-- `rm -rf .git`: 기존 Git 기록과 연결을 완전히 삭제합니다.
-- `git init`: 현재 폴더를 새로운 Git 리포지토리로 초기화합니다.
-- `git remote add origin ...`: 새로운 리포지토리 주소를 origin으로 등록합니다.
-- `git add .` 및 `git commit`: 모든 파일을 커밋합니다.
-- `git push`: 새로운 리포에 최초 업로드(Push)합니다.
+개별 테스트는 빌드 후 다음과 같이 실행할 수 있습니다.
 
-이 과정을 거치면 기존 리포와의 연결은 완전히 제거되고, **새로운 독립적인 프로젝트로 관리**할 수 있습니다.
+```bash
+cd build
+make tests/vm/mmap-kernel.result
+```
+
+테스트 기록에는 실행한 커밋, 명령, 통과·실패 결과를 함께 남깁니다.
+`dev`를 받은 경우 아직 병합되지 않은 PR #32의 변경은 포함되지 않습니다.
+
+## 개발 및 PR 절차
+
+1. 자신의 fork에서 최신 원본 `dev`를 기준으로 작업 브랜치를 만듭니다.
+2. 변경 목적에 맞게 `feat/`, `fix/`, `docs/` 접두사를 사용합니다.
+3. 빌드와 관련 테스트를 확인하고 결과 및 남은 제한 사항을 PR에 적습니다.
+4. fork에서 **이 저장소의 `dev`**를 대상으로 PR을 엽니다.
+5. PR 작성자 외 **2명의 승인**을 받은 뒤 병합합니다.
+
+`main`과 `dev`에는 PR을 통해 변경을 반영하며 관리자 우회는 허용하지 않습니다.
+검토 후 새 변경을 올리면 승인을 다시 받아야 합니다.
+PR은 [저장소 템플릿](.github/pull_request_template.md)에 맞춰 작성합니다.
