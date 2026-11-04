@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include "threads/palloc.h"
 
+#include "lib/kernel/hash.h"
+
 enum vm_type {
 	/* page not initialized */
 	VM_UNINIT = 0,
@@ -15,8 +17,8 @@ enum vm_type {
 
 	/* Bit flags to store state */
 
-	/* Auxillary bit flag marker for store information. You can add more
-	 * markers, until the value is fit in the int. */
+	/* 저장 정보를 위한 보조 비트 플래그 마커입니다. 값이 int형에 들어갈 수 있을 때까지
+  * 마커를 더 추가할 수 있습니다. */
 	VM_MARKER_0 = (1 << 3),
 	VM_MARKER_1 = (1 << 4),
 
@@ -46,7 +48,9 @@ struct page {
 	struct frame *frame;   /* Back reference for frame */
 
 	/* Your implementation */
+	struct hash_elem hash_elem;
 
+	bool writable;
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
@@ -57,12 +61,6 @@ struct page {
 		struct page_cache page_cache;
 #endif
 	};
-};
-
-/* The representation of "frame" */
-struct frame {
-	void *kva;
-	struct page *page;
 };
 
 /* The function table for page operations.
@@ -85,7 +83,26 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
+	struct hash hash;
 };
+
+struct load_aux{
+	struct file *file;
+	off_t ofs;
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
+	size_t length;
+};
+
+struct frame {
+	void *kva;
+	struct page *page;
+  	struct list_elem elem;
+};
+
+void frame_init();
+bool frame_insert(struct frame *f);
+bool frame_delete(struct frame *f);
 
 #include "threads/thread.h"
 void supplemental_page_table_init (struct supplemental_page_table *spt);

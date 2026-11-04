@@ -22,9 +22,10 @@ void syscall_handler (struct intr_frame *);
 
 static struct lock file_lock; 
 static void check_buffer (const void *buffer, unsigned size);
-static bool check_address(const char *file);
+static bool check_address(void *file);
 static struct file *fd_to_file (int fd);
 static bool check_file(const char *file);
+
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -55,6 +56,8 @@ syscall_init (void) {
 struct intr_frame *f_data; // 프레임을 집어 넣어야 하는데 인자 개수가 f->R.rdi 하나로 제한되어 전역 변수 선언하여 집어넣음
 void
 syscall_handler (struct intr_frame *f) {
+	thread_current()->rsp = f->rsp;
+	
 	switch (f->R.rax) {
 		case SYS_HALT:
 			halt ();
@@ -118,21 +121,44 @@ syscall_handler (struct intr_frame *f) {
 			f->R.rax = dup2((int)f->R.rdi, (int)f->R.rsi);
 			break;
 
+		case SYS_MMAP:
+			f->R.rax = mmap((void *)f->R.rdi, (unsigned long)f->R.rsi, (int)f->R.rdx, (int)f->R.r10, (unsigned)f->R.r8);
+			break;
+
+		case SYS_MUNMAP:
+			munmap((void *)f->R.rdi);
+			break;
+
 		default:
+			printf("ERROR #0 FAILED\n");
 			exit(-1);
 			break;
 	}
 }
 
-static bool check_address(const char *file)
+static bool check_address(void *ptr)
 {	
-	if (file == NULL) return false;
-	#ifdef USERPROG
-		struct thread *t = thread_current();
-		if (!is_user_vaddr(file)) return false;
-		if (pml4_get_page(t->pml4, file) == NULL) return false;
-		return true;
-	#endif
+	if (ptr == NULL) return false;
+	// #ifdef USERPROG
+	// 	struct thread *t = thread_current();
+	// 	if (!is_user_vaddr(ptr)) {
+	// 		// printf("check_address !is_user_vaddr(file)\n");
+	// 		return false;	
+	// 	}
+	// 	if (pml4_get_page(t->pml4, ptr) == NULL) {
+	// 		return;
+	// 	}
+	// 	return true;
+	// #endif
+
+	struct thread *t = thread_current();
+	if (!is_user_vaddr(ptr)) {
+		return false;	
+	}
+	if(spt_find_page(&t->spt, ptr) == NULL && pml4_get_page(t->pml4, ptr) == NULL) {
+		return false;
+	}
+	return true;
 }
 
 void
@@ -148,7 +174,7 @@ halt (void){
 void
 exit (int status){
 	/*
-	현재 사용자 프로그램 종료
+	현재 사용자 프로그램 종료´
 	status 커널로 돌아감 
 	프로세스의 부모 wait 프로세스가 해당 프로세스에 대해 종료를 요청한 경우
 	이 상태가 반환
@@ -183,22 +209,30 @@ exec (const char *cmd_line){
 
 	uint64_t *pml4 = thread_current ()->pml4;
 	if (pml4_get_page (pml4, cmd_p) == NULL){
+			printf("ERROR #1 FAILED\n");
 			exit (-1);
 	}
 
 	
 	char *cmd_cpy = palloc_get_page(0);
 
-	if(cmd_cpy == NULL) exit(-1);
+	if(cmd_cpy == NULL) {
+		printf("ERROR #12 FAILED\n");
+		exit(-1);
+	}
 
 	size_t len = strlcpy(cmd_cpy, cmd_line, PGSIZE);
 
 	if(len >= PGSIZE){
+		printf("ERROR #2 FAILED\n");
 		palloc_free_page(cmd_cpy);
 		exit(-1);
 	}
 
-	if(process_exec(cmd_cpy) < 0) exit(-1);
+	if(process_exec(cmd_cpy) < 0) {
+		printf("ERROR #3 FAILED\n");	
+		exit(-1);
+	};
 
 	NOT_REACHED();
 }
@@ -213,6 +247,7 @@ bool
 create (const char *file, unsigned initial_size){
 	if (!check_address(file))
 	{
+		printf("ERROR #4 FAILED\n");
 		exit(-1); 
 	}
 	lock_acquire(&file_lock);
@@ -225,6 +260,7 @@ bool
 remove (const char *file){
 	if (!check_address(file))
 	{
+		printf("ERROR #5 FAILED\n");
 		exit(-1); 
 	}
 	lock_acquire(&file_lock);
@@ -423,18 +459,20 @@ close (int fd){
 
 static void
 check_buffer (const void *buffer, unsigned size) {
-	if (buffer == NULL)          // 버퍼 포인터가 NULL이면 잘못된 접근이므로 종료
+	if (buffer == NULL){          // 버퍼 포인터가 NULL이면 잘못된 접근이므로 종료
+		printf("ERROR #6 FAILED\n");	
 		exit (-1);
-
+	}
 	if (size == 0)               // 크기가 0이면 실제로 접근할 메모리가 없으므로 검사할 필요 없음
 		return;
 
 	const uint8_t *start = buffer;            // 바이트 단위로 계산하기 위해 uint8_t 포인터로 변환
 	const uint8_t *end = start + size - 1;    // 버퍼의 마지막 바이트 주소
 	
-	if (end < start)             // start + size가 주소 공간 끝을 넘어 0 근처로 되돌아간 경우(오버플로우) - 종료
+	if (end < start){             // start + size가 주소 공간 끝을 넘어 0 근처로 되돌아간 경우(오버플로우) - 종료
+		printf("ERROR #7 FAILED\n");	
 		exit (-1); // uint8_t * : 64비트 (부호x) => 최대값 끝나면 0으로 감
-
+	}
 	uint64_t *pml4 = thread_current ()->pml4; // 현재 프로세스의 페이지 테이블(pml4)을 가져옴
 
 	/* 
@@ -443,10 +481,20 @@ check_buffer (const void *buffer, unsigned size) {
 	*/
 	for (const uint8_t *p = pg_round_down (start); p <= end; p += PGSIZE) { // pg_round_down 사용시 주소를 그 주소가 속한 페이지의 시작 주소로 내림 
 		if (!is_user_vaddr (p)){             // 페이지가 사용자 영역이 아니면 커널 메모리 침범이므로 종료
+			printf("ERROR #8 FAILED\n");
 			exit (-1);
 		}
-		if (pml4_get_page (pml4, p) == NULL){
-			exit (-1);
+		// if (pml4_get_page (pml4, p) == NULL){
+		// 	printf("ERROR #9 FAILED\n");
+		// 	exit (-1);
+		// }
+		if (pml4_get_page(pml4, p) == NULL) {
+			return;
+		}
+
+		if(spt_find_page(&thread_current ()->spt, p) == NULL) {
+			// printf("check_address spt : %p, ptr : %p, result = %s\n", &t->spt, ptr, spt_find_page(&t->spt, ptr) ? "yes" : "NULL");
+			return false;
 		}
 	}
 }
@@ -463,6 +511,7 @@ check_file(const char *file){
 	}
 	uint64_t *pml4 = thread_current ()->pml4;
 	if (pml4_get_page (pml4, file) == NULL){
+			printf("ERROR #10 FAILED\n");
 			exit (-1);
 		}
 	return false;
@@ -498,4 +547,22 @@ int dup2(int oldfd, int newfd){
 	c_fdt[newfd]->share++;
 
 	return newfd;
+}
+
+void *
+mmap (void *addr, unsigned long length, int writable, int fd, unsigned offset) {
+	if (fd < 0 || fd >= FILE_MAX)
+		return NULL;
+
+	struct file_descriptor *file_desc = thread_current ()->fdt[fd];
+
+	if (file_desc == NULL || file_desc->fT != FD_FILE || file_desc->file == NULL)
+		return NULL;
+
+	return do_mmap(addr, length, writable, file_desc->file, offset);
+}
+
+void
+munmap (void *addr) {
+	do_munmap(addr);
 }

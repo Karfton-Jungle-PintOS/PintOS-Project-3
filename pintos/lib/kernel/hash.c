@@ -23,7 +23,7 @@ static void rehash (struct hash *);
    compare hash elements using LESS, given auxiliary data AUX. */
 bool
 hash_init (struct hash *h,
-		hash_hash_func *hash, hash_less_func *less, void *aux) {
+		hash_hash_func *hash, hash_less_func *less, void *aux UNUSED) {
 	h->elem_cnt = 0;
 	h->bucket_cnt = 4;
 	h->buckets = malloc (sizeof *h->buckets * h->bucket_cnt);
@@ -121,6 +121,7 @@ hash_replace (struct hash *h, struct hash_elem *new) {
    null pointer if no equal element exists in the table. */
 struct hash_elem *
 hash_find (struct hash *h, struct hash_elem *e) {
+	// printf("[hash_find] TRY hash_find(); hash : %p, hash_elem : %p\n", h, e);
 	return find_elem (h, find_bucket (h, e), e);
 }
 
@@ -141,12 +142,11 @@ hash_delete (struct hash *h, struct hash_elem *e) {
 	return found;
 }
 
-/* Calls ACTION for each element in hash table H in arbitrary
-   order.
-   Modifying hash table H while hash_apply() is running, using
-   any of the functions hash_clear(), hash_destroy(),
-   hash_insert(), hash_replace(), or hash_delete(), yields
-   undefined behavior, whether done from ACTION or elsewhere. */
+/* 해시 테이블 H의 각 요소에 대해 ACTION을 임의의 순서로 호출한다.
+   hash_apply()가 실행되는 동안 hash_clear(), hash_destroy(), hash_insert(), hash_replace(), 
+   또는 hash_delete()와 같은 함수를 사용하여 해시 테이블 H를 수정하는 경우(ACTION 내부에서든 다른 곳에서든 상관없이), 
+   그 결과는 정의되지 않은 동작(undefined behavior)을 초래한다. 
+*/
 void
 hash_apply (struct hash *h, hash_action_func *action) {
 	size_t i;
@@ -191,14 +191,13 @@ hash_first (struct hash_iterator *i, struct hash *h) {
 	i->elem = list_elem_to_hash_elem (list_head (i->bucket));
 }
 
-/* Advances I to the next element in the hash table and returns
-   it.  Returns a null pointer if no elements are left.  Elements
-   are returned in arbitrary order.
+/* 해시 테이블 내의 다음 요소로 이동하여 해당 요소를 반환합니다.
+   남은 요소가 없으면 널 포인터(null pointer)를 반환합니다.
+   요소들은 임의의 순서로 반환됩니다.
 
-   Modifying a hash table H during iteration, using any of the
-   functions hash_clear(), hash_destroy(), hash_insert(),
-   hash_replace(), or hash_delete(), invalidates all
-   iterators. */
+   순회 중에 hash_clear(), hash_destroy(), hash_insert(),
+   hash_replace(), 또는 hash_delete() 함수를 사용하여
+   해시 테이블 H를 수정하면, 모든 반복자(iterator)는 무효화됩니다. */
 struct hash_elem *
 hash_next (struct hash_iterator *i) {
 	ASSERT (i != NULL);
@@ -275,16 +274,38 @@ uint64_t
 hash_int (int i) {
 	return hash_bytes (&i, sizeof i);
 }
-
+
 /* Returns the bucket in H that E belongs in. */
 static struct list *
 find_bucket (struct hash *h, struct hash_elem *e) {
+	// printf("[find_bucket] TRY find_bucket(); hash : %p, hash_elem : %p\n", h, e);
+	ASSERT(h != NULL);
 	size_t bucket_idx = h->hash (e, h->aux) & (h->bucket_cnt - 1);
+	// if (bucket_idx == 0)
+	// {
+	// 	printf("[find_bucket] FAIL bucket_idx == 0 value : %lu\n", bucket_idx);
+	// }
+	
+	// printf("[find_bucket] RETURN find_bucket(); bucket: %p, bucket_index %d\n", &h->buckets[bucket_idx], bucket_idx);
+
 	return &h->buckets[bucket_idx];
 }
 
-/* Searches BUCKET in H for a hash element equal to E.  Returns
-   it if found or a null pointer otherwise. */
+// /* Searches BUCKET in H for a hash element equal to E.  Returns
+//    it if found or a null pointer otherwise. */
+// static struct hash_elem *
+// find_elem (struct hash *h, struct list *bucket, struct hash_elem *e) {
+// 	struct list_elem *i;
+// 	printf("[find_elem] TRY find_elem(); hash : %p, bucket: %p, hash_elem : %p\n", h, bucket, e);
+// 	for (i = list_begin (bucket); i != list_end (bucket); i = list_next (i)) {
+// 		printf("[find_elem] TRY find_elem(); hash : %p, bucket: %p, hash_elem : %p\n", h, bucket, e);
+// 		struct hash_elem *hi = list_elem_to_hash_elem (i);
+// 		if (!h->less (hi, e, h->aux) && !h->less (e, hi, h->aux))
+// 			return hi;
+// 	}
+// 	return NULL;	
+// } // less 함수를 사용하여, 특정 hash_elem을 찾기 위한 함수.
+
 static struct hash_elem *
 find_elem (struct hash *h, struct list *bucket, struct hash_elem *e) {
 	struct list_elem *i;
